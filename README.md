@@ -7,10 +7,11 @@ CRUD
 
 ### DataSet Exemple
 
-class Event
-{
-    private timestamp _time;
-    private string _author;
-    private Json _data;
+class Event\
+{\
+    private timestamp _time;\
+    private string _author;\
+    private Json _data;\
 }
+
 Stored in SQL db (ideallly postgres, else mariadb)
