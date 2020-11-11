@@ -15,3 +15,7 @@ class Event\
 }
 
 Stored in SQL db (ideallly postgres, else mariadb)
+
+## Env variable to define
+
+APP_PORT
