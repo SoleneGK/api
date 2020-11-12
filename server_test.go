@@ -1,27 +1,33 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strconv"
 	"testing"
+	"time"
 )
 
-func TestGETEvent(t *testing.T) {
-	store := StubEventStore{
-		map[int]string{
-			1: `{
-id: 1,
-author: "Solène",
-}`,
-			2: `{
-id: 2,
-author: "Camille",
-}`,
+func TestReadRequest(t *testing.T) {
+	events := []Event{
+		Event{
+			Id:        1,
+			Timestamp: time.Unix(1605107095, 0),
+			Author:    "Solène",
+		},
+		Event{
+			Id:        2,
+			Timestamp: time.Unix(1605107099, 0),
+			Author:    "Camille",
 		},
 	}
 
+	store := StubEventStore{events: events}
 	server := &Server{&store}
 
 	t.Run("return event with id 1", func(t *testing.T) {
@@ -30,14 +36,11 @@ author: "Camille",
 
 		server.ServeHTTP(response, request)
 
-		// got : le json renvoyé
-		got := response.Body.String()
-		// want : un json avec une id de 1
-		want := `{
-id: 1,
-author: "Solène",
-}`
-		assertResponseBody(t, got, want)
+		got := getEventFromResponse(t, response.Body)
+
+		assertStatus(t, response.Code, http.StatusOK)
+		assertContentType(t, response, jsonContentType)
+		assertEvent(t, got, events[0])
 	})
 
 	t.Run("return event with id 2", func(t *testing.T) {
@@ -46,24 +49,76 @@ author: "Solène",
 
 		server.ServeHTTP(response, request)
 
-		got := response.Body.String()
-		want := `{
-id: 2,
-author: "Camille",
-}`
+		got := getEventFromResponse(t, response.Body)
+		assertStatus(t, response.Code, http.StatusOK)
+		assertContentType(t, response, jsonContentType)
+		assertEvent(t, got, events[1])
+	})
 
-		assertResponseBody(t, got, want)
+	t.Run("return a 404 when no event with id exists", func(t *testing.T) {
+		request := newGetIdRequest(5)
+		response := httptest.NewRecorder()
+
+		server.ServeHTTP(response, request)
+
+		assertStatus(t, response.Code, http.StatusNotFound)
+	})
+
+	t.Run("return an error when id given is not a number", func(t *testing.T) {
+		request, _ := http.NewRequest(http.MethodGet, "/aaa", nil)
+		response := httptest.NewRecorder()
+
+		server.ServeHTTP(response, request)
+
+		assertStatus(t, response.Code, http.StatusUnprocessableEntity)
+	})
+}
+
+func TestRegisterRequest(t *testing.T) {
+	event := Event{
+		Timestamp: time.Unix(1605107095, 0),
+		Author:    "Solène",
+	}
+
+	store := StubEventStore{
+		events:        []Event{event},
+		registerCalls: nil,
+	}
+	server := &Server{&store}
+
+	t.Run("it records new event on POST", func(t *testing.T) {
+		request, _ := http.NewRequest(http.MethodPost, "/", getJsonBufferFromEvent(t, event))
+		response := httptest.NewRecorder()
+
+		server.ServeHTTP(response, request)
+
+		assertStatus(t, response.Code, http.StatusOK)
+		assertCallsNumber(t, len(store.registerCalls), 1)
+		assertEvent(t, store.registerCalls[0], event)
 	})
 }
 
 // Mocking
 type StubEventStore struct {
-	events map[int]string
+	events        []Event
+	registerCalls []Event
 }
 
-func (s *StubEventStore) GetEventById(id int) string {
-	event := s.events[id]
+func (s *StubEventStore) GetEventById(id int) Event {
+	event := Event{}
+
+	for i, value := range s.events {
+		if value.Id == id {
+			event = s.events[i]
+			break
+		}
+	}
+
 	return event
+}
+
+func (s *StubEventStore) RegisterNewEvent(event Event) {
+	s.registerCalls = append(s.registerCalls, event)
 }
 
 // Some helpers
@@ -73,10 +128,59 @@ func newGetIdRequest(id int) *http.Request {
 	return request
 }
 
-func assertResponseBody(t *testing.T, got, want string) {
+func getEventFromResponse(t *testing.T, body io.Reader) (event Event) {
+	t.Helper()
+
+	err := json.NewDecoder(body).Decode(&event)
+
+	if err != nil {
+		t.Fatalf("Unable to parse response from server %q into an Event, '%v'", body, err)
+	}
+
+	return
+}
+
+func assertStatus(t *testing.T, got, want int) {
 	t.Helper()
 
 	if got != want {
-		t.Errorf("got %q want %q", got, want)
+		t.Fatalf("got status %d want %d", got, want)
+	}
+}
+
+func assertContentType(t *testing.T, response *httptest.ResponseRecorder, want string) {
+	t.Helper()
+
+	responseContentType := response.Result().Header.Get("content-type")
+	if responseContentType != want {
+		t.Errorf("response did not have content-type of %v, got %v", want, responseContentType)
+	}
+}
+
+func assertEvent(t *testing.T, got, want Event) {
+	t.Helper()
+
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v want %v", got, want)
+	}
+}
+
+func getJsonBufferFromEvent(t *testing.T, event Event) *bytes.Buffer {
+	t.Helper()
+
+	jsonEvent, err := json.Marshal(event)
+
+	if err != nil {
+		t.Fatalf("did not get a json")
+	}
+
+	jsonBuffer := bytes.NewBuffer(jsonEvent)
+
+	return jsonBuffer
+}
+
+func assertCallsNumber(t *testing.T, got, want int) {
+	if got != want {
+		t.Fatalf("got %d calls to RegisterNewEvent, want %d", got, want)
 	}
 }
