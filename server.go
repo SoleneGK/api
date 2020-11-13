@@ -15,9 +15,10 @@ const (
 )
 
 type Event struct {
-	Id        int
-	Timestamp time.Time
-	Author    string
+	Id        int       `json:"id"`
+	Timestamp time.Time `json:"timestamp"`
+	Author    string    `json:"author"`
+	Data      string    `json:"data"`
 }
 
 type EventStore interface {
@@ -33,15 +34,18 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		s.getEvent(w, r)
-	case http.MethodPost:
+	case http.MethodPost, http.MethodPatch:
 		s.registerNewEvent(w, r)
 	}
 }
 
 /*
  * getEvent return the event with the id given in parameter as json
- * If the parameter is not a number, it returns a status 422
- * If no event exists with the given id, it return a status 404
+ * Status returned:
+ * 	success: 200 (StatusOK)
+ * 	parameter given is not a number: 422 (StatusUnprocessableEntity)
+ *  no event found with given id: 404 (StatusNotFound)
+ * In case of success, a json is returned with the data of the event
  */
 func (s *Server) getEvent(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(strings.TrimPrefix(r.URL.Path, "/"))
@@ -62,6 +66,7 @@ func (s *Server) getEvent(w http.ResponseWriter, r *http.Request) {
 
 /*
  * registerNewEvent create a new event and store it
+ * Status returned: 202 (StatusCreated)
  */
 func (s *Server) registerNewEvent(w http.ResponseWriter, r *http.Request) {
 	dataSent, _ := ioutil.ReadAll(r.Body)
@@ -70,5 +75,5 @@ func (s *Server) registerNewEvent(w http.ResponseWriter, r *http.Request) {
 	_ = json.Unmarshal(dataSent, &event)
 
 	s.store.RegisterNewEvent(event)
-	w.WriteHeader(http.StatusOK)
+	w.WriteHeader(http.StatusCreated)
 }

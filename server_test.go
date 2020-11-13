@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -19,6 +20,7 @@ func TestReadRequest(t *testing.T) {
 			Id:        1,
 			Timestamp: time.Unix(1605107095, 0),
 			Author:    "Solène",
+			Data:      `{"Age": 32}`,
 		},
 		Event{
 			Id:        2,
@@ -55,6 +57,25 @@ func TestReadRequest(t *testing.T) {
 		assertEvent(t, got, events[1])
 	})
 
+	t.Run("returned json has keys in full lowercase", func(t *testing.T) {
+		eventAsBytes := []byte(`{"id":1,"timestamp":"2020-11-11T16:04:55+01:00","author":"Solène","data":"{\"Age\": 32}"}
+`)
+		event := Event{}
+		_ = json.Unmarshal(eventAsBytes, &event)
+
+		request := newGetIdRequest(1)
+		response := httptest.NewRecorder()
+		buffer := &bytes.Buffer{}
+		response.Body = buffer
+
+		server.ServeHTTP(response, request)
+
+		assertStatus(t, response.Code, http.StatusOK)
+		assertContentType(t, response, jsonContentType)
+		assertJsonBody(t, buffer, eventAsBytes)
+
+	})
+
 	t.Run("return a 404 when no event with id exists", func(t *testing.T) {
 		request := newGetIdRequest(5)
 		response := httptest.NewRecorder()
@@ -74,8 +95,9 @@ func TestReadRequest(t *testing.T) {
 	})
 }
 
-func TestRegisterRequest(t *testing.T) {
+func TestCreateRequest(t *testing.T) {
 	event := Event{
+		Id:        1,
 		Timestamp: time.Unix(1605107095, 0),
 		Author:    "Solène",
 	}
@@ -90,10 +112,11 @@ func TestRegisterRequest(t *testing.T) {
 		request, _ := http.NewRequest(http.MethodPost, "/", getJsonBufferFromEvent(t, event))
 		response := httptest.NewRecorder()
 
+		initialCallsNumber := len(store.registerCalls)
 		server.ServeHTTP(response, request)
 
-		assertStatus(t, response.Code, http.StatusOK)
-		assertCallsNumber(t, len(store.registerCalls), 1)
+		assertStatus(t, response.Code, http.StatusCreated)
+		assertCallsNumber(t, len(store.registerCalls), initialCallsNumber+1)
 		assertEvent(t, store.registerCalls[0], event)
 	})
 }
@@ -182,5 +205,13 @@ func getJsonBufferFromEvent(t *testing.T, event Event) *bytes.Buffer {
 func assertCallsNumber(t *testing.T, got, want int) {
 	if got != want {
 		t.Fatalf("got %d calls to RegisterNewEvent, want %d", got, want)
+	}
+}
+
+func assertJsonBody(t *testing.T, buffer *bytes.Buffer, want []byte) {
+	got, _ := ioutil.ReadAll(buffer)
+
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", got, want)
 	}
 }
