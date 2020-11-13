@@ -66,14 +66,34 @@ func (s *Server) getEvent(w http.ResponseWriter, r *http.Request) {
 
 /*
  * registerNewEvent create a new event and store it
- * Status returned: 202 (StatusCreated)
+ * Status returned:
+ *  success: 202 (StatusCreated)
+ *  data given can't be registered: 422 (StatusUnprocessableEntity)
+ * To be registrable, an event must
+ * 	- have a data different from empty string
+ *  - have either a timestamp or an author not empty
  */
 func (s *Server) registerNewEvent(w http.ResponseWriter, r *http.Request) {
+	event := s.getEventFromBodyRequest(r)
+
+	if event.Data == "" || (event.Author == "" && event.Timestamp.IsZero()) {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+	} else {
+		s.store.RegisterNewEvent(event)
+		w.WriteHeader(http.StatusCreated)
+	}
+
+}
+
+func (s *Server) getEventFromBodyRequest(r *http.Request) Event {
 	dataSent, _ := ioutil.ReadAll(r.Body)
 
 	event := Event{}
 	_ = json.Unmarshal(dataSent, &event)
 
-	s.store.RegisterNewEvent(event)
-	w.WriteHeader(http.StatusCreated)
+	return event
+}
+
+func (s *Server) isRegistrableEvent(event Event) bool {
+	return event.Data != "" && (event.Author != "" || !event.Timestamp.IsZero())
 }

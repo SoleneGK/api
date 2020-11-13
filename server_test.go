@@ -96,20 +96,29 @@ func TestReadRequest(t *testing.T) {
 }
 
 func TestCreateRequest(t *testing.T) {
-	event := Event{
-		Id:        1,
-		Timestamp: time.Unix(1605107095, 0),
-		Author:    "Solène",
+	event := []Event{
+		Event{
+			Timestamp: time.Unix(1605107095, 0),
+			Data:      "{}",
+		},
+		Event{
+			Timestamp: time.Unix(1605107095, 0),
+			Author:    "Lauren",
+			Data:      "",
+		},
+		Event{
+			Data: `{"ip":"127.0.0.1"}`,
+		},
 	}
 
 	store := StubEventStore{
-		events:        []Event{event},
+		events:        event,
 		registerCalls: nil,
 	}
 	server := &Server{&store}
 
 	t.Run("it records new event on POST", func(t *testing.T) {
-		request, _ := http.NewRequest(http.MethodPost, "/", getJsonBufferFromEvent(t, event))
+		request := newPostRequest(store.events[0])
 		response := httptest.NewRecorder()
 
 		initialCallsNumber := len(store.registerCalls)
@@ -117,7 +126,27 @@ func TestCreateRequest(t *testing.T) {
 
 		assertStatus(t, response.Code, http.StatusCreated)
 		assertCallsNumber(t, len(store.registerCalls), initialCallsNumber+1)
-		assertEvent(t, store.registerCalls[0], event)
+		assertEvent(t, store.registerCalls[initialCallsNumber], store.events[0])
+	})
+
+	t.Run("the event must not be registered if data is empty", func(t *testing.T) {
+		request := newPostRequest(store.events[1])
+		response := httptest.NewRecorder()
+
+		initialCallsNumber := len(store.registerCalls)
+		server.ServeHTTP(response, request)
+
+		assertStatus(t, response.Code, http.StatusUnprocessableEntity)
+		assertCallsNumber(t, len(store.registerCalls), initialCallsNumber)
+	})
+
+	t.Run("the event must not be registered if timestamp and author are empty", func(t *testing.T) {
+		request := newPostRequest(store.events[2])
+		response := httptest.NewRecorder()
+
+		server.ServeHTTP(response, request)
+
+		assertStatus(t, response.Code, http.StatusUnprocessableEntity)
 	})
 }
 
@@ -151,6 +180,11 @@ func newGetIdRequest(id int) *http.Request {
 	return request
 }
 
+func newPostRequest(event Event) *http.Request {
+	request, _ := http.NewRequest(http.MethodPost, "/", getJsonBufferFromEvent(event))
+	return request
+}
+
 func getEventFromResponse(t *testing.T, body io.Reader) (event Event) {
 	t.Helper()
 
@@ -161,6 +195,13 @@ func getEventFromResponse(t *testing.T, body io.Reader) (event Event) {
 	}
 
 	return
+}
+
+func getJsonBufferFromEvent(event Event) *bytes.Buffer {
+	jsonEvent, _ := json.Marshal(event)
+	jsonBuffer := bytes.NewBuffer(jsonEvent)
+
+	return jsonBuffer
 }
 
 func assertStatus(t *testing.T, got, want int) {
@@ -186,20 +227,6 @@ func assertEvent(t *testing.T, got, want Event) {
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v want %v", got, want)
 	}
-}
-
-func getJsonBufferFromEvent(t *testing.T, event Event) *bytes.Buffer {
-	t.Helper()
-
-	jsonEvent, err := json.Marshal(event)
-
-	if err != nil {
-		t.Fatalf("did not get a json")
-	}
-
-	jsonBuffer := bytes.NewBuffer(jsonEvent)
-
-	return jsonBuffer
 }
 
 func assertCallsNumber(t *testing.T, got, want int) {
