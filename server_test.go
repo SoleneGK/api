@@ -158,23 +158,33 @@ func TestDeleteEvent(t *testing.T) {
 			Author:    "Solène",
 			Data:      `{"Age": 32}`,
 		},
-		Event{
-			Id:        2,
-			Timestamp: time.Unix(1605107099, 0),
-			Author:    "Camille",
-		},
 	}
 
 	store := StubEventStore{events: events}
 	server := &Server{&store}
 
-	t.Run("a DELETE request should return status code 204", func(t *testing.T) {
-		request := newDeleteRequest(1)
+	t.Run("DELETE request should remove event with given id", func(t *testing.T) {
+		request := newDeleteRequest("/1")
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
 
 		assertStatus(t, response.Code, http.StatusNoContent)
+		assertCallsNumber(t, len(store.registerCalls), 1)
+
+		deletedEvent := store.GetEventById(1)
+		if !reflect.DeepEqual(deletedEvent, Event{}) {
+			t.Errorf("the event has not been deleted")
+		}
+	})
+
+	t.Run("DELETE request return an error when id given is not a number", func(t *testing.T) {
+		request := newDeleteRequest("/aaa")
+		response := httptest.NewRecorder()
+
+		server.ServeHTTP(response, request)
+
+		assertStatus(t, response.Code, http.StatusUnprocessableEntity)
 	})
 }
 
@@ -224,6 +234,24 @@ func (s *StubEventStore) RegisterNewEvent(event Event) {
 	s.registerCalls = append(s.registerCalls, event)
 }
 
+func (s *StubEventStore) RemoveEvent(id int) {
+	s.registerCalls = append(s.registerCalls, Event{})
+	s.removeEventFromSlice(id)
+
+}
+
+func (s *StubEventStore) removeEventFromSlice(id int) {
+	newEvents := []Event{}
+
+	for _, event := range s.events {
+		if event.Id != id {
+			newEvents = append(newEvents, event)
+		}
+	}
+
+	s.events = newEvents
+}
+
 // Some helpers
 func newGetIdRequest(id int) *http.Request {
 	url := fmt.Sprintf("/%s", strconv.Itoa(id))
@@ -236,8 +264,8 @@ func newPostRequest(event Event) *http.Request {
 	return request
 }
 
-func newDeleteRequest(id int) *http.Request {
-	request, _ := http.NewRequest(http.MethodDelete, "", nil)
+func newDeleteRequest(url string) *http.Request {
+	request, _ := http.NewRequest(http.MethodDelete, url, nil)
 	return request
 }
 
@@ -287,7 +315,7 @@ func assertEvent(t *testing.T, got, want Event) {
 
 func assertCallsNumber(t *testing.T, got, want int) {
 	if got != want {
-		t.Fatalf("got %d calls to RegisterNewEvent, want %d", got, want)
+		t.Fatalf("got %d calls, want %d", got, want)
 	}
 }
 

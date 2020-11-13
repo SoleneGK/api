@@ -24,6 +24,7 @@ type Event struct {
 type EventStore interface {
 	GetEventById(id int) Event
 	RegisterNewEvent(event Event)
+	RemoveEvent(id int)
 }
 
 type Server struct {
@@ -37,7 +38,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPost:
 		s.registerNewEvent(w, r)
 	case http.MethodDelete:
-		s.deleteEvent(w)
+		s.deleteEvent(w, r)
 	default:
 		s.rejectRequest(w)
 	}
@@ -102,8 +103,15 @@ func (s *Server) isRegistrableEvent(event Event) bool {
 	return event.Data != "" && (event.Author != "" || !event.Timestamp.IsZero())
 }
 
-func (s *Server) deleteEvent(w http.ResponseWriter) {
-	w.WriteHeader(http.StatusNoContent)
+func (s *Server) deleteEvent(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(strings.TrimPrefix(r.URL.Path, "/"))
+
+	if err != nil {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+	} else {
+		w.WriteHeader(http.StatusNoContent)
+		s.store.RemoveEvent(id)
+	}
 }
 
 func (s *Server) rejectRequest(w http.ResponseWriter) {
