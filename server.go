@@ -36,6 +36,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.getEvent(w, r)
 	case http.MethodPost, http.MethodPatch:
 		s.registerNewEvent(w, r)
+	default:
+		s.rejectRequest(w)
 	}
 }
 
@@ -96,4 +98,8 @@ func (s *Server) getEventFromBodyRequest(r *http.Request) Event {
 
 func (s *Server) isRegistrableEvent(event Event) bool {
 	return event.Data != "" && (event.Author != "" || !event.Timestamp.IsZero())
+}
+
+func (s *Server) rejectRequest(w http.ResponseWriter) {
+	w.WriteHeader(http.StatusMethodNotAllowed)
 }

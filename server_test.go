@@ -150,6 +150,29 @@ func TestCreateRequest(t *testing.T) {
 	})
 }
 
+func TestUnauthorizedMethods(t *testing.T) {
+	server := &Server{&StubEventStore{}}
+
+	methods := []string{
+		http.MethodHead,
+		http.MethodPut,
+		http.MethodConnect,
+		http.MethodOptions,
+		http.MethodTrace,
+	}
+
+	for _, method := range methods {
+		t.Run(method+" request should return StatusMethodNotAllowed", func(t *testing.T) {
+			request, _ := http.NewRequest(method, "/", nil)
+			response := httptest.NewRecorder()
+
+			server.ServeHTTP(response, request)
+
+			assertStatus(t, response.Code, http.StatusMethodNotAllowed)
+		})
+	}
+}
+
 // Mocking
 type StubEventStore struct {
 	events        []Event
