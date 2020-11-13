@@ -34,8 +34,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		s.getEvent(w, r)
-	case http.MethodPost, http.MethodPatch:
+	case http.MethodPost:
 		s.registerNewEvent(w, r)
+	case http.MethodDelete:
+		s.deleteEvent(w)
 	default:
 		s.rejectRequest(w)
 	}
@@ -98,6 +100,10 @@ func (s *Server) getEventFromBodyRequest(r *http.Request) Event {
 
 func (s *Server) isRegistrableEvent(event Event) bool {
 	return event.Data != "" && (event.Author != "" || !event.Timestamp.IsZero())
+}
+
+func (s *Server) deleteEvent(w http.ResponseWriter) {
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) rejectRequest(w http.ResponseWriter) {

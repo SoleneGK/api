@@ -150,6 +150,34 @@ func TestCreateRequest(t *testing.T) {
 	})
 }
 
+func TestDeleteEvent(t *testing.T) {
+	events := []Event{
+		Event{
+			Id:        1,
+			Timestamp: time.Unix(1605107095, 0),
+			Author:    "Solène",
+			Data:      `{"Age": 32}`,
+		},
+		Event{
+			Id:        2,
+			Timestamp: time.Unix(1605107099, 0),
+			Author:    "Camille",
+		},
+	}
+
+	store := StubEventStore{events: events}
+	server := &Server{&store}
+
+	t.Run("a DELETE request should return status code 204", func(t *testing.T) {
+		request := newDeleteRequest(1)
+		response := httptest.NewRecorder()
+
+		server.ServeHTTP(response, request)
+
+		assertStatus(t, response.Code, http.StatusNoContent)
+	})
+}
+
 func TestUnauthorizedMethods(t *testing.T) {
 	server := &Server{&StubEventStore{}}
 
@@ -205,6 +233,11 @@ func newGetIdRequest(id int) *http.Request {
 
 func newPostRequest(event Event) *http.Request {
 	request, _ := http.NewRequest(http.MethodPost, "/", getJsonBufferFromEvent(event))
+	return request
+}
+
+func newDeleteRequest(id int) *http.Request {
+	request, _ := http.NewRequest(http.MethodDelete, "", nil)
 	return request
 }
 
