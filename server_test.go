@@ -26,14 +26,13 @@ func TestGetByIdRequest(t *testing.T) {
 		Data:      "{}",
 	}
 
-	store := StubEventStore{[]Event{event1, event2}}
-	server := Server{&store}
+	store = &StubEventStore{[]Event{event1, event2}}
 
 	t.Run("Get request should return event with id 1", func(t *testing.T) {
-		request := newGetRequest("/api/get/1")
+		request := newGetRequest(api_url + "1")
 		response := httptest.NewRecorder()
 
-		server.ServeHTTP(response, request)
+		newServer().ServeHTTP(response, request)
 
 		assertStatus(t, response.Code, http.StatusOK)
 		assertContentType(t, response, jsonContentType)
@@ -41,10 +40,10 @@ func TestGetByIdRequest(t *testing.T) {
 	})
 
 	t.Run("Get request should return event with id 2", func(t *testing.T) {
-		request := newGetRequest("/api/get/2")
+		request := newGetRequest(api_url + "2")
 		response := httptest.NewRecorder()
 
-		server.ServeHTTP(response, request)
+		newServer().ServeHTTP(response, request)
 
 		assertStatus(t, response.Code, http.StatusOK)
 		assertContentType(t, response, jsonContentType)
@@ -55,10 +54,10 @@ func TestGetByIdRequest(t *testing.T) {
 		eventAsBytes := []byte(`{"id":1,"timestamp":"2020-11-15T23:51:08.084496744Z","flags":[7,5],"data":"{\"location\": \"FR\"}"}
 `)
 
-		request := newGetRequest("/api/get/1")
+		request := newGetRequest(api_url + "1")
 		response, buffer := getRecorderWithBuffer()
 
-		server.ServeHTTP(response, request)
+		newServer().ServeHTTP(response, request)
 
 		assertStatus(t, response.Code, http.StatusOK)
 		assertContentType(t, response, jsonContentType)
@@ -66,19 +65,103 @@ func TestGetByIdRequest(t *testing.T) {
 	})
 
 	t.Run("Get request should return status code 404 when no event with given id exists", func(t *testing.T) {
-		request := newGetRequest("/api/get/5")
+		request := newGetRequest(api_url + "5")
 		response := httptest.NewRecorder()
 
-		server.ServeHTTP(response, request)
+		newServer().ServeHTTP(response, request)
 
 		assertStatus(t, response.Code, http.StatusNotFound)
 	})
 
 	t.Run("Get request should return code status 422 when id given is not a number", func(t *testing.T) {
-		request := newGetRequest("/api/get/aaa")
+		request := newGetRequest(api_url + "aaa")
 		response := httptest.NewRecorder()
 
-		server.ServeHTTP(response, request)
+		newServer().ServeHTTP(response, request)
+
+		assertStatus(t, response.Code, http.StatusUnprocessableEntity)
+	})
+}
+
+func TestGetAllRequest(t *testing.T) {
+	eventList := []Event{
+		Event{
+			Id:        1,
+			Timestamp: time.Date(2020, time.November, 15, 23, 51, 8, 84496744, time.UTC),
+			Flags:     []int{7, 5},
+			Data:      `{"location": "FR"}`,
+		},
+		{
+			Id:        2,
+			Timestamp: time.Date(2020, time.June, 7, 7, 52, 45, 575963, time.UTC),
+			Flags:     []int{15, 2, 8},
+			Data:      "{}",
+		},
+	}
+
+	store = &StubEventStore{eventList}
+
+	t.Run("Get request should return all events", func(t *testing.T) {
+		request := newGetRequest(api_url)
+		response, buffer := getRecorderWithBuffer()
+
+		newServer().ServeHTTP(response, request)
+
+		want, _ := json.Marshal(eventList)
+		want = append(want, 10) // adding a line break
+
+		assertStatus(t, response.Code, http.StatusOK)
+		assertRequestBody(t, buffer, want)
+	})
+}
+
+func TestGetByFlagRequest(t *testing.T) {
+	event1 := Event{
+		Id:        1,
+		Timestamp: time.Date(2020, time.November, 15, 23, 51, 8, 84496744, time.UTC),
+		Flags:     []int{7, 5},
+		Data:      `{"location": "FR"}`,
+	}
+	event2 := Event{
+		Id:        2,
+		Timestamp: time.Date(2020, time.June, 7, 7, 52, 45, 575963, time.UTC),
+		Flags:     []int{15, 2, 8},
+		Data:      "{}",
+	}
+
+	store = &StubEventStore{[]Event{event1, event2}}
+
+	t.Run("Get request should return events with given flag", func(t *testing.T) {
+		request := newGetRequest(api_url + "getFlag/8")
+		response, buffer := getRecorderWithBuffer()
+
+		newServer().ServeHTTP(response, request)
+
+		got := []Event{}
+		_ = json.NewDecoder(buffer).Decode(&got)
+		want := []Event{event2}
+
+		assertStatus(t, response.Code, http.StatusOK)
+
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("incorrect event list: got %v, want %v", got, want)
+		}
+	})
+
+	t.Run("Get request should return status code 404 when no event with given flag found", func(t *testing.T) {
+		request := newGetRequest(api_url + "getFlag/9")
+		response := httptest.NewRecorder()
+
+		newServer().ServeHTTP(response, request)
+
+		assertStatus(t, response.Code, http.StatusNotFound)
+	})
+
+	t.Run("Get request should return status code 422 when flag given is not a number", func(t *testing.T) {
+		request := newGetRequest(api_url + "getFlag/auie")
+		response := httptest.NewRecorder()
+
+		newServer().ServeHTTP(response, request)
 
 		assertStatus(t, response.Code, http.StatusUnprocessableEntity)
 	})
@@ -98,6 +181,29 @@ func (s *StubEventStore) GetEventById(id int) (event Event) {
 	}
 
 	return
+}
+
+func (s *StubEventStore) GetAllEvents() []Event {
+	return s.events
+}
+
+func (s *StubEventStore) GetEventsByFlag(flag int) (eventList []Event) {
+	for _, event := range s.events {
+		if contains(event.Flags, flag) {
+			eventList = append(eventList, event)
+		}
+	}
+
+	return
+}
+
+func contains(intSlice []int, value int) bool {
+	for _, element := range intSlice {
+		if element == value {
+			return true
+		}
+	}
+	return false
 }
 
 // Helpers: check assertions
