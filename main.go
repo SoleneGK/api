@@ -12,6 +12,7 @@ var store interface {
 	GetEventById(id int) Event
 	GetAllEvents() []Event
 	GetEventsByFlag(flag int) []Event
+	RegisterNewEvents(eventList []Event) int
 }
 
 func main() {
@@ -23,7 +24,7 @@ func main() {
 
 	api_port := os.Getenv("API_PORT")
 
-	store = PostGresStore{}
+	store = PostGreStore{}
 
 	log.Fatal(http.ListenAndServe(api_port, newServer()))
 }

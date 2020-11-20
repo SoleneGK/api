@@ -2,6 +2,8 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
+	"io/ioutil"
 	"net/http"
 	"reflect"
 	"strconv"
@@ -12,8 +14,9 @@ import (
 )
 
 const (
-	jsonContentType = "application/json"
-	api_url         = "/api/game-event/"
+	jsonContentType       = "application/json"
+	api_url               = "/api/game-event/"
+	lineNumberResponseKey = "affectedlines"
 )
 
 type Event struct {
@@ -30,6 +33,9 @@ func newServer() http.Handler {
 	router.HandleFunc(api_url+"{id}", getByIdHandler).Methods(http.MethodGet)
 	router.HandleFunc(api_url, getAllHandler).Methods(http.MethodGet)
 	router.HandleFunc(api_url+"getFlag/{id}", getByFlagHandler).Methods(http.MethodGet)
+
+	// POST request
+	router.HandleFunc(api_url, postHandler).Methods(http.MethodPost)
 
 	return router
 }
@@ -92,4 +98,27 @@ func isEmptyEventList(eventList []Event) bool {
 
 func writeResponseBody(w http.ResponseWriter, content interface{}) {
 	_ = json.NewEncoder(w).Encode(content)
+}
+
+func postHandler(w http.ResponseWriter, r *http.Request) {
+	eventList := getEventListFromRequest(r)
+
+	linesAffected := store.RegisterNewEvents(eventList)
+
+	_, _ = w.Write(formatLineNumberResponse(linesAffected))
+}
+
+func getEventListFromRequest(r *http.Request) []Event {
+	dataSent, _ := ioutil.ReadAll(r.Body)
+
+	eventList := []Event{}
+	_ = json.Unmarshal(dataSent, &eventList)
+
+	return eventList
+}
+
+func formatLineNumberResponse(lineNumber int) []byte {
+	responseAsString := fmt.Sprintf("{\"%s\":%d}", lineNumberResponseKey, 2)
+	responseAsBytes := []byte(responseAsString)
+	return responseAsBytes
 }

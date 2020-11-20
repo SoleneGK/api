@@ -1,15 +1,19 @@
 package main
 
-type PostGresStore struct{}
+type PostGreStore struct{}
 
-func (p PostGresStore) GetEventById(id int) (event Event) {
+func (p PostGreStore) GetEventById(id int) (event Event) {
 	return
 }
 
-func (p PostGresStore) GetAllEvents() (eventList []Event) {
+func (p PostGreStore) GetAllEvents() (eventList []Event) {
 	return
 }
 
-func (p PostGresStore) GetEventsByFlag(flag int) (eventList []Event) {
+func (p PostGreStore) GetEventsByFlag(flag int) (eventList []Event) {
+	return
+}
+
+func (p PostGreStore) RegisterNewEvents(eventList []Event) (insertedLines int) {
 	return
 }
