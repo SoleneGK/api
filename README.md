@@ -74,9 +74,6 @@ Renvoie l'ensemble des events contenant flag. LIMIT par défaut de 500 lignes.
 POST /api/{controller}\
 Insère un ou plusieurs events dans la base. Renvoie le nombre de ligne impactées.
 
-PATCH /api/{controller}\
-Met à jour un ou plusieurs events. Renvoie le nombre de lignes impactées.
-
 DELETE /api/{controller}/{id}\
 Met tous les champs de l'event id à la valeur neutre (id = $id, time = EPOCH, flags=[-1], data="{}"). Renvoie l'id impactée.
 
