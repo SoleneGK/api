@@ -102,9 +102,9 @@ func writeResponseBody(w http.ResponseWriter, content interface{}) {
 
 func postHandler(w http.ResponseWriter, r *http.Request) {
 	eventList := getEventListFromRequest(r)
+	validEventList := getValidEventList(eventList)
 
-	linesAffected := store.RegisterNewEvents(eventList)
-
+	linesAffected := store.RegisterNewEvents(validEventList)
 	_, _ = w.Write(formatLineNumberResponse(linesAffected))
 }
 
@@ -118,7 +118,28 @@ func getEventListFromRequest(r *http.Request) []Event {
 }
 
 func formatLineNumberResponse(lineNumber int) []byte {
-	responseAsString := fmt.Sprintf("{\"%s\":%d}", lineNumberResponseKey, 2)
+	responseAsString := fmt.Sprintf("{\"%s\":%d}", lineNumberResponseKey, lineNumber)
 	responseAsBytes := []byte(responseAsString)
 	return responseAsBytes
+}
+
+func getValidEventList(eventList []Event) (validEventList []Event) {
+	for _, event := range eventList {
+		if isValidEvent(event) {
+			setValidTime(&event)
+			validEventList = append(validEventList, event)
+		}
+	}
+
+	return
+}
+
+func isValidEvent(event Event) bool {
+	return len(event.Flags) >= 1 && event.Data != ""
+}
+
+func setValidTime(event *Event) {
+	if event.Timestamp.IsZero() {
+		event.Timestamp = clock.Now()
+	}
 }

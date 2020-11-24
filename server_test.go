@@ -14,20 +14,20 @@ import (
 )
 
 func TestGetByIdRequest(t *testing.T) {
-	event1 := Event{
+	validEvent1 := Event{
 		Id:        1,
 		Timestamp: time.Date(2020, time.November, 15, 23, 51, 8, 84496744, time.UTC),
 		Flags:     []int{7, 5},
 		Data:      `{"location": "FR"}`,
 	}
-	event2 := Event{
+	validEvent2 := Event{
 		Id:        2,
 		Timestamp: time.Date(2020, time.June, 7, 7, 52, 45, 575963, time.UTC),
 		Flags:     []int{15, 2, 8},
 		Data:      "{}",
 	}
 
-	store = &StubEventStore{events: []Event{event1, event2}}
+	store = &StubEventStore{events: []Event{validEvent1, validEvent2}}
 
 	t.Run("Get request should return event with id 1", func(t *testing.T) {
 		request := newGetRequest(api_url + "1")
@@ -37,7 +37,7 @@ func TestGetByIdRequest(t *testing.T) {
 
 		assertStatus(t, response.Code, http.StatusOK)
 		assertContentType(t, response, jsonContentType)
-		assertEvent(t, getEventFromResponse(t, response.Body), event1)
+		assertEvent(t, getEventFromResponse(t, response.Body), validEvent1)
 	})
 
 	t.Run("Get request should return event with id 2", func(t *testing.T) {
@@ -48,7 +48,7 @@ func TestGetByIdRequest(t *testing.T) {
 
 		assertStatus(t, response.Code, http.StatusOK)
 		assertContentType(t, response, jsonContentType)
-		assertEvent(t, getEventFromResponse(t, response.Body), event2)
+		assertEvent(t, getEventFromResponse(t, response.Body), validEvent2)
 	})
 
 	t.Run("returned json has lowercase key", func(t *testing.T) {
@@ -117,20 +117,20 @@ func TestGetAllRequest(t *testing.T) {
 }
 
 func TestGetByFlagRequest(t *testing.T) {
-	event1 := Event{
+	validEvent1 := Event{
 		Id:        1,
 		Timestamp: time.Date(2020, time.November, 15, 23, 51, 8, 84496744, time.UTC),
 		Flags:     []int{7, 5},
 		Data:      `{"location": "FR"}`,
 	}
-	event2 := Event{
+	validEvent2 := Event{
 		Id:        2,
 		Timestamp: time.Date(2020, time.June, 7, 7, 52, 45, 575963, time.UTC),
 		Flags:     []int{15, 2, 8},
 		Data:      "{}",
 	}
 
-	store = &StubEventStore{events: []Event{event1, event2}}
+	store = &StubEventStore{events: []Event{validEvent1, validEvent2}}
 
 	t.Run("Get request should return events with given flag", func(t *testing.T) {
 		request := newGetRequest(api_url + "getFlag/8")
@@ -142,7 +142,7 @@ func TestGetByFlagRequest(t *testing.T) {
 		_ = json.NewDecoder(buffer).Decode(&got)
 
 		assertStatus(t, response.Code, http.StatusOK)
-		assertEventList(t, got, []Event{event2})
+		assertEventList(t, got, []Event{validEvent2})
 	})
 
 	t.Run("Get request should return status code 404 when no event with given flag found", func(t *testing.T) {
@@ -165,20 +165,33 @@ func TestGetByFlagRequest(t *testing.T) {
 }
 
 func TestPostRequest(t *testing.T) {
-	event1 := Event{
+	validEvent1 := Event{
 		Timestamp: time.Date(2020, time.November, 15, 23, 51, 8, 84496744, time.UTC),
 		Flags:     []int{7, 5},
 		Data:      `{"location": "FR"}`,
 	}
-	event2 := Event{
+	validEvent2 := Event{
 		Id:        2,
 		Timestamp: time.Date(2020, time.June, 7, 7, 52, 45, 575963, time.UTC),
 		Flags:     []int{15, 2, 8},
 		Data:      "{}",
 	}
+	validEvent3 := Event{
+		Flags: []int{3},
+		Data:  `{"Age":35}`,
+	}
+	invalidEvent1 := Event{
+		Id:        15,
+		Timestamp: time.Date(2020, time.April, 27, 19, 16, 45, 575963, time.UTC),
+		Flags:     []int{9},
+	}
+	invalidEvent2 := Event{
+		Timestamp: time.Date(2019, time.November, 21, 07, 30, 22, 658463, time.UTC),
+		Data:      `{"Env":"dev"}`,
+	}
 
 	t.Run("Post request should call RegisterNewEvents, pass event list and return number of lines created", func(t *testing.T) {
-		eventList := []Event{event1, event2}
+		eventList := []Event{validEvent1, validEvent2}
 		spy := &Spy{}
 		store = &StubEventStore{eventList, spy}
 
@@ -194,9 +207,32 @@ func TestPostRequest(t *testing.T) {
 		assertEventList(t, spy.parameterGiven, eventList)
 		assertRequestBodyString(t, response.Body.String(), want)
 	})
+
+	t.Run("Post request should register only valid events", func(t *testing.T) {
+		eventList := []Event{validEvent1, invalidEvent1, validEvent2, validEvent3, invalidEvent2}
+		spy := &Spy{}
+		store = &StubEventStore{eventList, spy}
+		clock = MockClock{}
+
+		request := newPostRequest(eventList)
+		response := httptest.NewRecorder()
+
+		newServer().ServeHTTP(response, request)
+
+		wantResponse := fmt.Sprintf("{\"%s\":%d}", lineNumberResponseKey, 3)
+
+		validEvent3.Timestamp = clock.Now()
+		wantParameterGiven := []Event{validEvent1, validEvent2, validEvent3}
+
+		assertStatus(t, response.Code, http.StatusOK)
+		assertCallNumber(t, spy.callNumber, 1)
+		assertRequestBodyString(t, response.Body.String(), wantResponse)
+		assertEventList(t, spy.parameterGiven, wantParameterGiven)
+	})
 }
 
 // Test doubles
+
 type Spy struct {
 	callNumber     int
 	parameterGiven []Event
@@ -248,6 +284,12 @@ func (s *StubEventStore) RegisterNewEvents(eventList []Event) int {
 	return len(eventList)
 }
 
+type MockClock struct{}
+
+func (m MockClock) Now() time.Time {
+	return time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+}
+
 // Helpers: check assertions
 func assertCallNumber(t *testing.T, got, want int) {
 	t.Helper()
@@ -296,7 +338,7 @@ func assertRequestBodyString(t *testing.T, got, want string) {
 	t.Helper()
 
 	if got != want {
-		t.Errorf("ncorrect body response: got %v, want %v", got, want)
+		t.Errorf("incorrect body response: got %v, want %v", got, want)
 	}
 }
 
