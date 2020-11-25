@@ -14,6 +14,7 @@ var store interface {
 	GetAllEvents() []Event
 	GetEventsByFlag(flag int) []Event
 	RegisterNewEvents(eventList []Event) int
+	DeleteById(id int) int
 }
 
 var clock interface {

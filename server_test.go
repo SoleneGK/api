@@ -5,12 +5,18 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
 	"testing"
 	"time"
+)
+
+var server = newServer()
+
+const (
+	registerFunctionName   = "RegisterNewEvents"
+	deleteByIdFunctionName = "DeleteById"
 )
 
 func TestGetByIdRequest(t *testing.T) {
@@ -33,7 +39,7 @@ func TestGetByIdRequest(t *testing.T) {
 		request := newGetRequest(api_url + "1")
 		response := httptest.NewRecorder()
 
-		newServer().ServeHTTP(response, request)
+		server.ServeHTTP(response, request)
 
 		assertStatus(t, response.Code, http.StatusOK)
 		assertContentType(t, response, jsonContentType)
@@ -44,7 +50,7 @@ func TestGetByIdRequest(t *testing.T) {
 		request := newGetRequest(api_url + "2")
 		response := httptest.NewRecorder()
 
-		newServer().ServeHTTP(response, request)
+		server.ServeHTTP(response, request)
 
 		assertStatus(t, response.Code, http.StatusOK)
 		assertContentType(t, response, jsonContentType)
@@ -52,24 +58,23 @@ func TestGetByIdRequest(t *testing.T) {
 	})
 
 	t.Run("returned json has lowercase key", func(t *testing.T) {
-		eventAsBytes := []byte(`{"id":1,"timestamp":"2020-11-15T23:51:08.084496744Z","flags":[7,5],"data":"{\"location\": \"FR\"}"}
-`)
-
 		request := newGetRequest(api_url + "1")
-		response, buffer := getRecorderWithBuffer()
+		response := httptest.NewRecorder()
 
-		newServer().ServeHTTP(response, request)
+		server.ServeHTTP(response, request)
+
+		wantResponse := "{\"id\":1,\"timestamp\":\"2020-11-15T23:51:08.084496744Z\",\"flags\":[7,5],\"data\":\"{\\\"location\\\": \\\"FR\\\"}\"}\n"
 
 		assertStatus(t, response.Code, http.StatusOK)
 		assertContentType(t, response, jsonContentType)
-		assertRequestBodyBytes(t, buffer, eventAsBytes)
+		assertResponseBody(t, response.Body.String(), wantResponse)
 	})
 
 	t.Run("Get request should return status code 404 when no event with given id exists", func(t *testing.T) {
 		request := newGetRequest(api_url + "5")
 		response := httptest.NewRecorder()
 
-		newServer().ServeHTTP(response, request)
+		server.ServeHTTP(response, request)
 
 		assertStatus(t, response.Code, http.StatusNotFound)
 	})
@@ -78,7 +83,7 @@ func TestGetByIdRequest(t *testing.T) {
 		request := newGetRequest(api_url + "aaa")
 		response := httptest.NewRecorder()
 
-		newServer().ServeHTTP(response, request)
+		server.ServeHTTP(response, request)
 
 		assertStatus(t, response.Code, http.StatusUnprocessableEntity)
 	})
@@ -104,15 +109,15 @@ func TestGetAllRequest(t *testing.T) {
 
 	t.Run("Get request should return all events", func(t *testing.T) {
 		request := newGetRequest(api_url)
-		response, buffer := getRecorderWithBuffer()
+		response := httptest.NewRecorder()
 
-		newServer().ServeHTTP(response, request)
+		server.ServeHTTP(response, request)
 
-		want, _ := json.Marshal(eventList)
-		want = append(want, 10) // adding a line break
+		eventListAsJson, _ := json.Marshal(eventList)
+		want := string(append(eventListAsJson, 10)) // adding a line break
 
 		assertStatus(t, response.Code, http.StatusOK)
-		assertRequestBodyBytes(t, buffer, want)
+		assertResponseBody(t, response.Body.String(), want)
 	})
 }
 
@@ -136,7 +141,7 @@ func TestGetByFlagRequest(t *testing.T) {
 		request := newGetRequest(api_url + "getFlag/8")
 		response, buffer := getRecorderWithBuffer()
 
-		newServer().ServeHTTP(response, request)
+		server.ServeHTTP(response, request)
 
 		got := []Event{}
 		_ = json.NewDecoder(buffer).Decode(&got)
@@ -149,7 +154,7 @@ func TestGetByFlagRequest(t *testing.T) {
 		request := newGetRequest(api_url + "getFlag/9")
 		response := httptest.NewRecorder()
 
-		newServer().ServeHTTP(response, request)
+		server.ServeHTTP(response, request)
 
 		assertStatus(t, response.Code, http.StatusNotFound)
 	})
@@ -158,7 +163,7 @@ func TestGetByFlagRequest(t *testing.T) {
 		request := newGetRequest(api_url + "getFlag/auie")
 		response := httptest.NewRecorder()
 
-		newServer().ServeHTTP(response, request)
+		server.ServeHTTP(response, request)
 
 		assertStatus(t, response.Code, http.StatusUnprocessableEntity)
 	})
@@ -198,14 +203,14 @@ func TestPostRequest(t *testing.T) {
 		request := newPostRequest(eventList)
 		response := httptest.NewRecorder()
 
-		newServer().ServeHTTP(response, request)
+		server.ServeHTTP(response, request)
 
 		want := fmt.Sprintf("{\"%s\":%d}", lineNumberResponseKey, 2)
 
 		assertStatus(t, response.Code, http.StatusOK)
-		assertCallNumber(t, spy.callNumber, 1)
-		assertEventList(t, spy.parameterGiven, eventList)
-		assertRequestBodyString(t, response.Body.String(), want)
+		assertCalledFunction(t, spy.calledFunction, registerFunctionName)
+		assertEventList(t, spy.listGivenAsParameter, eventList)
+		assertResponseBody(t, response.Body.String(), want)
 	})
 
 	t.Run("Post request should register only valid events", func(t *testing.T) {
@@ -217,31 +222,94 @@ func TestPostRequest(t *testing.T) {
 		request := newPostRequest(eventList)
 		response := httptest.NewRecorder()
 
-		newServer().ServeHTTP(response, request)
+		server.ServeHTTP(response, request)
 
 		wantResponse := fmt.Sprintf("{\"%s\":%d}", lineNumberResponseKey, 3)
 
 		validEvent3.Timestamp = clock.Now()
-		wantParameterGiven := []Event{validEvent1, validEvent2, validEvent3}
+		wantlistGivenAsParameter := []Event{validEvent1, validEvent2, validEvent3}
 
 		assertStatus(t, response.Code, http.StatusOK)
-		assertCallNumber(t, spy.callNumber, 1)
-		assertRequestBodyString(t, response.Body.String(), wantResponse)
-		assertEventList(t, spy.parameterGiven, wantParameterGiven)
+		assertCalledFunction(t, spy.calledFunction, registerFunctionName)
+		assertResponseBody(t, response.Body.String(), wantResponse)
+		assertEventList(t, spy.listGivenAsParameter, wantlistGivenAsParameter)
+	})
+}
+
+func TestDeleteByIdRequest(t *testing.T) {
+	event1 := Event{
+		Id:        1,
+		Timestamp: time.Date(2020, time.November, 15, 23, 51, 8, 84496744, time.UTC),
+		Flags:     []int{7, 5},
+		Data:      `{"location": "FR"}`,
+	}
+	event2 := Event{
+		Id:        2,
+		Timestamp: time.Date(2020, time.June, 7, 7, 52, 45, 575963, time.UTC),
+		Flags:     []int{15, 2, 8},
+		Data:      "{}",
+	}
+	event3 := Event{
+		Id:    3,
+		Flags: []int{3},
+		Data:  `{"Age":35}`,
+	}
+
+	t.Run("Delete request should set event with given id to default values", func(t *testing.T) {
+		eventList := []Event{event1, event2, event3}
+		spy := &Spy{}
+		store = &StubEventStore{eventList, spy}
+
+		request := newDeleteRequest(api_url + "3")
+		response := httptest.NewRecorder()
+
+		server.ServeHTTP(response, request)
+
+		assertStatus(t, response.Code, http.StatusOK)
+		assertCalledFunction(t, spy.calledFunction, deleteByIdFunctionName)
+
+		wantEventList := []Event{event1, event2, createNeutralEventWithId(3)}
+		assertEventList(t, store.GetAllEvents(), wantEventList)
+
+		wantResponse := fmt.Sprintf("{\"%s\":%d}", lineNumberResponseKey, 1)
+		assertResponseBody(t, response.Body.String(), wantResponse)
+	})
+
+	t.Run("Delete request should return 0 lines affected when no event with given id exists", func(t *testing.T) {
+		store = &StubEventStore{[]Event{}, &Spy{}}
+
+		request := newDeleteRequest(api_url + "4")
+		response := httptest.NewRecorder()
+
+		server.ServeHTTP(response, request)
+
+		want := fmt.Sprintf("{\"%s\":%d}", lineNumberResponseKey, 0)
+
+		assertStatus(t, response.Code, http.StatusOK)
+		assertResponseBody(t, response.Body.String(), want)
+	})
+
+	t.Run("Delete request should return status code 422 if parameter given is not a number", func(t *testing.T) {
+		store = &StubEventStore{[]Event{}, &Spy{}}
+
+		request := newDeleteRequest(api_url + "tstnrst")
+		response := httptest.NewRecorder()
+
+		server.ServeHTTP(response, request)
+
+		assertStatus(t, response.Code, http.StatusUnprocessableEntity)
 	})
 }
 
 // Test doubles
-
 type Spy struct {
-	callNumber     int
-	parameterGiven []Event
+	calledFunction       string
+	listGivenAsParameter []Event
 }
 
 type StubEventStore struct {
 	events []Event
 	spy    *Spy
-	// eventListGivenAsParameter []Event
 }
 
 func (s *StubEventStore) GetEventById(id int) (event Event) {
@@ -279,9 +347,22 @@ func contains(intSlice []int, value int) bool {
 }
 
 func (s *StubEventStore) RegisterNewEvents(eventList []Event) int {
-	s.spy.callNumber++
-	s.spy.parameterGiven = eventList
+	s.spy.calledFunction = registerFunctionName
+	s.spy.listGivenAsParameter = eventList
 	return len(eventList)
+}
+
+func (s *StubEventStore) DeleteById(id int) int {
+	s.spy.calledFunction = deleteByIdFunctionName
+
+	for i, event := range s.events {
+		if event.Id == id {
+			s.events[i] = createNeutralEventWithId(id)
+			return 1
+		}
+	}
+
+	return 0
 }
 
 type MockClock struct{}
@@ -291,11 +372,11 @@ func (m MockClock) Now() time.Time {
 }
 
 // Helpers: check assertions
-func assertCallNumber(t *testing.T, got, want int) {
+func assertCalledFunction(t *testing.T, got, want string) {
 	t.Helper()
 
 	if got != want {
-		t.Errorf("incorrect call number, got %v, want %v", got, want)
+		t.Errorf("incorrect function called, got %v, want %v", got, want)
 	}
 }
 
@@ -320,21 +401,11 @@ func assertEventList(t *testing.T, got, want []Event) {
 	t.Helper()
 
 	if !reflect.DeepEqual(got, want) {
-		t.Errorf("event lists are differentt: got %v, want %v", got, want)
+		t.Errorf("event lists are differentt:\ngot %v\nwant %v", got, want)
 	}
 }
 
-func assertRequestBodyBytes(t *testing.T, buffer *bytes.Buffer, want []byte) {
-	t.Helper()
-
-	got, _ := ioutil.ReadAll(buffer)
-
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("incorrect request body:\ngot %v\n%s\nwant %v\n%s\n", got, string(got), want, string(want))
-	}
-}
-
-func assertRequestBodyString(t *testing.T, got, want string) {
+func assertResponseBody(t *testing.T, got, want string) {
 	t.Helper()
 
 	if got != want {
@@ -364,6 +435,11 @@ func newPostRequest(eventList []Event) *http.Request {
 	return request
 }
 
+func newDeleteRequest(target string) *http.Request {
+	request, _ := http.NewRequest(http.MethodDelete, target, nil)
+	return request
+}
+
 func getRecorderWithBuffer() (*httptest.ResponseRecorder, *bytes.Buffer) {
 	response := httptest.NewRecorder()
 	buffer := &bytes.Buffer{}
@@ -382,4 +458,13 @@ func getEventFromResponse(t *testing.T, body io.Reader) (event Event) {
 	}
 
 	return
+}
+
+func createNeutralEventWithId(id int) Event {
+	return Event{
+		Id:        id,
+		Timestamp: neutralTimestampValue,
+		Flags:     neutralFlagsValue,
+		Data:      neutralDataValue,
+	}
 }

@@ -19,6 +19,10 @@ const (
 	lineNumberResponseKey = "affectedlines"
 )
 
+var neutralTimestampValue = time.Unix(0, 0)
+var neutralFlagsValue = []int{-1}
+var neutralDataValue = "{}"
+
 type Event struct {
 	Id        int       `json:"id"`
 	Timestamp time.Time `json:"timestamp"`
@@ -36,6 +40,9 @@ func newServer() http.Handler {
 
 	// POST request
 	router.HandleFunc(api_url, postHandler).Methods(http.MethodPost)
+
+	// DELETE requests
+	router.HandleFunc(api_url+"{id}", deleteByIdHandler).Methods(http.MethodDelete)
 
 	return router
 }
@@ -104,8 +111,8 @@ func postHandler(w http.ResponseWriter, r *http.Request) {
 	eventList := getEventListFromRequest(r)
 	validEventList := getValidEventList(eventList)
 
-	linesAffected := store.RegisterNewEvents(validEventList)
-	_, _ = w.Write(formatLineNumberResponse(linesAffected))
+	affectedLines := store.RegisterNewEvents(validEventList)
+	_, _ = w.Write(formatLineNumberResponse(affectedLines))
 }
 
 func getEventListFromRequest(r *http.Request) []Event {
@@ -141,5 +148,16 @@ func isValidEvent(event Event) bool {
 func setValidTime(event *Event) {
 	if event.Timestamp.IsZero() {
 		event.Timestamp = clock.Now()
+	}
+}
+
+func deleteByIdHandler(w http.ResponseWriter, r *http.Request) {
+	id, err := extractIntFromURL(r, api_url)
+
+	if err != nil {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+	} else {
+		affectedLines := store.DeleteById(id)
+		_, _ = w.Write(formatLineNumberResponse(affectedLines))
 	}
 }
