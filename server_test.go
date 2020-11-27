@@ -21,19 +21,6 @@ const (
 )
 
 func TestGetByIdRequest(t *testing.T) {
-	validEvent1 := Event{
-		Id:        1,
-		Timestamp: time.Date(2020, time.November, 15, 23, 51, 8, 84496744, time.UTC),
-		Flags:     []int{7, 5},
-		Data:      `{"location": "FR"}`,
-	}
-	validEvent2 := Event{
-		Id:        2,
-		Timestamp: time.Date(2020, time.June, 7, 7, 52, 45, 575963, time.UTC),
-		Flags:     []int{15, 2, 8},
-		Data:      "{}",
-	}
-
 	store = &StubEventStore{events: []Event{validEvent1, validEvent2}}
 
 	t.Run("Get request should return event with id 1", func(t *testing.T) {
@@ -64,7 +51,7 @@ func TestGetByIdRequest(t *testing.T) {
 
 		server.ServeHTTP(response, request)
 
-		wantResponse := "{\"id\":1,\"timestamp\":\"2020-11-15T23:51:08.084496744Z\",\"flags\":[7,5],\"data\":\"{\\\"location\\\": \\\"FR\\\"}\"}\n"
+		wantResponse := "{\"id\":1,\"timestamp\":\"2020-11-15T23:51:08.084496744Z\",\"flags\":[7,2],\"data\":\"{\\\"location\\\": \\\"FR\\\"}\"}\n"
 
 		assertStatus(t, response.Code, http.StatusOK)
 		assertContentType(t, response, jsonContentType)
@@ -91,20 +78,7 @@ func TestGetByIdRequest(t *testing.T) {
 }
 
 func TestGetAllRequest(t *testing.T) {
-	eventList := []Event{
-		Event{
-			Id:        1,
-			Timestamp: time.Date(2020, time.November, 15, 23, 51, 8, 84496744, time.UTC),
-			Flags:     []int{7, 5},
-			Data:      `{"location": "FR"}`,
-		},
-		{
-			Id:        2,
-			Timestamp: time.Date(2020, time.June, 7, 7, 52, 45, 575963, time.UTC),
-			Flags:     []int{15, 2, 8},
-			Data:      "{}",
-		},
-	}
+	eventList := []Event{validEvent1, validEvent2}
 
 	store = &StubEventStore{events: eventList}
 
@@ -123,19 +97,6 @@ func TestGetAllRequest(t *testing.T) {
 }
 
 func TestGetByFlagRequest(t *testing.T) {
-	validEvent1 := Event{
-		Id:        1,
-		Timestamp: time.Date(2020, time.November, 15, 23, 51, 8, 84496744, time.UTC),
-		Flags:     []int{7, 5},
-		Data:      `{"location": "FR"}`,
-	}
-	validEvent2 := Event{
-		Id:        2,
-		Timestamp: time.Date(2020, time.June, 7, 7, 52, 45, 575963, time.UTC),
-		Flags:     []int{15, 2, 8},
-		Data:      "{}",
-	}
-
 	store = &StubEventStore{events: []Event{validEvent1, validEvent2}}
 
 	t.Run("Get request should return events with given flag", func(t *testing.T) {
@@ -171,36 +132,6 @@ func TestGetByFlagRequest(t *testing.T) {
 }
 
 func TestPostRequest(t *testing.T) {
-	validEvent1 := Event{
-		Timestamp: time.Date(2020, time.November, 15, 23, 51, 8, 84496744, time.UTC),
-		Flags:     []int{7, 5},
-		Data:      `{"location": "FR"}`,
-	}
-	validEvent2 := Event{
-		Id:        2,
-		Timestamp: time.Date(2020, time.June, 7, 7, 52, 45, 575963, time.UTC),
-		Flags:     []int{15, 2, 8},
-		Data:      "{}",
-	}
-	validEvent3 := Event{
-		Flags: []int{3},
-		Data:  `{"Age":35}`,
-	}
-	invalidEvent1 := Event{
-		Id:        15,
-		Timestamp: time.Date(2020, time.April, 27, 19, 16, 45, 575963, time.UTC),
-		Flags:     []int{9},
-	}
-	invalidEvent2 := Event{
-		Timestamp: time.Date(2019, time.November, 21, 07, 30, 22, 658463, time.UTC),
-		Data:      `{"Env":"dev"}`,
-	}
-	invalidEvent3 := Event{
-		Timestamp: time.Date(2019, time.November, 21, 07, 30, 22, 658463, time.UTC),
-		Flags:     []int{9},
-		Data:      "this is not json",
-	}
-
 	t.Run("Post request should call RegisterNewEvents, pass event list and return number of lines created", func(t *testing.T) {
 		eventList := []Event{validEvent1, validEvent2}
 		spy := &Spy{}
@@ -243,26 +174,8 @@ func TestPostRequest(t *testing.T) {
 }
 
 func TestDeleteByIdRequest(t *testing.T) {
-	event1 := Event{
-		Id:        1,
-		Timestamp: time.Date(2020, time.November, 15, 23, 51, 8, 84496744, time.UTC),
-		Flags:     []int{7, 5},
-		Data:      `{"location": "FR"}`,
-	}
-	event2 := Event{
-		Id:        2,
-		Timestamp: time.Date(2020, time.June, 7, 7, 52, 45, 575963, time.UTC),
-		Flags:     []int{15, 2, 8},
-		Data:      "{}",
-	}
-	event3 := Event{
-		Id:    3,
-		Flags: []int{3},
-		Data:  `{"Age":35}`,
-	}
-
 	t.Run("Delete request should set event with given id to default values", func(t *testing.T) {
-		eventList := []Event{event1, event2, event3}
+		eventList := []Event{validEvent1, validEvent2, validEvent3}
 		spy := &Spy{}
 		store = &StubEventStore{eventList, spy}
 
@@ -274,7 +187,7 @@ func TestDeleteByIdRequest(t *testing.T) {
 		assertStatus(t, response.Code, http.StatusOK)
 		assertCalledFunction(t, spy.calledFunction, deleteByIdFunctionName)
 
-		wantEventList := []Event{event1, event2, createNeutralEventWithId(3)}
+		wantEventList := []Event{validEvent1, validEvent2, createNeutralEventWithId(3)}
 		assertEventList(t, store.GetAllEvents(), wantEventList)
 
 		wantResponse := fmt.Sprintf("{\"%s\":%d}", lineNumberResponseKey, 1)
@@ -308,39 +221,8 @@ func TestDeleteByIdRequest(t *testing.T) {
 }
 
 func TestDeleteByFlagRequest(t *testing.T) {
-	event1 := Event{
-		Id:        1,
-		Timestamp: time.Date(2020, time.November, 15, 23, 51, 8, 84496744, time.UTC),
-		Flags:     []int{7, 2},
-		Data:      `{"location": "FR"}`,
-	}
-	event2 := Event{
-		Id:        2,
-		Timestamp: time.Date(2020, time.June, 7, 7, 52, 45, 575963, time.UTC),
-		Flags:     []int{15, 2, 8, 5},
-		Data:      "{}",
-	}
-	event3 := Event{
-		Id:        3,
-		Timestamp: time.Date(2020, time.November, 15, 23, 51, 8, 84496744, time.UTC),
-		Flags:     []int{3},
-		Data:      `{"Age":35}`,
-	}
-	event4 := Event{
-		Id:        4,
-		Timestamp: time.Date(2020, time.April, 27, 19, 16, 45, 575963, time.UTC),
-		Flags:     []int{9},
-		Data:      "{}",
-	}
-	event5 := Event{
-		Id:        5,
-		Timestamp: time.Date(2019, time.November, 21, 07, 30, 22, 658463, time.UTC),
-		Flags:     []int{5, 2},
-		Data:      `{"Env":"dev"}`,
-	}
-
 	t.Run("Delete request should set events with given flag to default value", func(t *testing.T) {
-		eventList := []Event{event1, event2, event3, event4, event5}
+		eventList := []Event{validEvent1, validEvent2, validEvent3, validEvent4, validEvent5}
 		spy := &Spy{}
 		store = &StubEventStore{eventList, spy}
 
@@ -352,7 +234,7 @@ func TestDeleteByFlagRequest(t *testing.T) {
 		assertStatus(t, response.Code, http.StatusOK)
 		assertCalledFunction(t, spy.calledFunction, deleteByFlagFunctionName)
 
-		wantedList := []Event{event1, createNeutralEventWithId(2), event3, event4, createNeutralEventWithId(5)}
+		wantedList := []Event{validEvent1, createNeutralEventWithId(2), validEvent3, validEvent4, createNeutralEventWithId(5)}
 		assertEventList(t, store.GetAllEvents(), wantedList)
 
 		wantResponse := fmt.Sprintf("{\"%s\":%d}", lineNumberResponseKey, 2)
@@ -369,6 +251,52 @@ func TestDeleteByFlagRequest(t *testing.T) {
 
 		assertStatus(t, response.Code, http.StatusUnprocessableEntity)
 	})
+}
+
+// Data
+var validEvent1 = Event{
+	Id:        1,
+	Timestamp: time.Date(2020, time.November, 15, 23, 51, 8, 84496744, time.UTC),
+	Flags:     []int{7, 2},
+	Data:      `{"location": "FR"}`,
+}
+var validEvent2 = Event{
+	Id:        2,
+	Timestamp: time.Date(2020, time.June, 7, 7, 52, 45, 575963, time.UTC),
+	Flags:     []int{15, 2, 8, 5},
+	Data:      "{}",
+}
+var validEvent3 = Event{
+	Id:    3,
+	Flags: []int{3},
+	Data:  `{"Age":35}`,
+}
+var validEvent4 = Event{
+	Id:        4,
+	Timestamp: time.Date(2020, time.April, 27, 19, 16, 45, 575963, time.UTC),
+	Flags:     []int{9},
+	Data:      "{}",
+}
+var validEvent5 = Event{
+	Id:        5,
+	Timestamp: time.Date(2019, time.November, 21, 07, 30, 22, 658463, time.UTC),
+	Flags:     []int{5, 2},
+	Data:      `{"Env":"dev"}`,
+}
+
+var invalidEvent1 = Event{
+	Id:        15,
+	Timestamp: time.Date(2020, time.April, 27, 19, 16, 45, 575963, time.UTC),
+	Flags:     []int{9},
+}
+var invalidEvent2 = Event{
+	Timestamp: time.Date(2019, time.November, 21, 07, 30, 22, 658463, time.UTC),
+	Data:      `{"Env":"dev"}`,
+}
+var invalidEvent3 = Event{
+	Timestamp: time.Date(2019, time.November, 21, 07, 30, 22, 658463, time.UTC),
+	Flags:     []int{9},
+	Data:      "this is not json",
 }
 
 // Test doubles
