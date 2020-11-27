@@ -21,3 +21,7 @@ func (p PostGreStore) RegisterNewEvents(eventList []Event) (insertedLines int) {
 func (p PostGreStore) DeleteById(id int) (deletedLines int) {
 	return
 }
+
+func (p PostGreStore) DeleteByFlag(flag int) (deletedLines int) {
+	return
+}

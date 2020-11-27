@@ -15,8 +15,9 @@ import (
 var server = newServer()
 
 const (
-	registerFunctionName   = "RegisterNewEvents"
-	deleteByIdFunctionName = "DeleteById"
+	registerFunctionName     = "RegisterNewEvents"
+	deleteByIdFunctionName   = "DeleteById"
+	deleteByFlagFunctionName = "DeleteByFlag"
 )
 
 func TestGetByIdRequest(t *testing.T) {
@@ -301,6 +302,70 @@ func TestDeleteByIdRequest(t *testing.T) {
 	})
 }
 
+func TestDeleteByFlagRequest(t *testing.T) {
+	event1 := Event{
+		Id:        1,
+		Timestamp: time.Date(2020, time.November, 15, 23, 51, 8, 84496744, time.UTC),
+		Flags:     []int{7, 2},
+		Data:      `{"location": "FR"}`,
+	}
+	event2 := Event{
+		Id:        2,
+		Timestamp: time.Date(2020, time.June, 7, 7, 52, 45, 575963, time.UTC),
+		Flags:     []int{15, 2, 8, 5},
+		Data:      "{}",
+	}
+	event3 := Event{
+		Id:        3,
+		Timestamp: time.Date(2020, time.November, 15, 23, 51, 8, 84496744, time.UTC),
+		Flags:     []int{3},
+		Data:      `{"Age":35}`,
+	}
+	event4 := Event{
+		Id:        4,
+		Timestamp: time.Date(2020, time.April, 27, 19, 16, 45, 575963, time.UTC),
+		Flags:     []int{9},
+		Data:      "{}",
+	}
+	event5 := Event{
+		Id:        5,
+		Timestamp: time.Date(2019, time.November, 21, 07, 30, 22, 658463, time.UTC),
+		Flags:     []int{5, 2},
+		Data:      `{"Env":"dev"}`,
+	}
+
+	t.Run("Delete request should set events with given flag to default value", func(t *testing.T) {
+		eventList := []Event{event1, event2, event3, event4, event5}
+		spy := &Spy{}
+		store = &StubEventStore{eventList, spy}
+
+		request := newDeleteRequest(api_url + "deleteflag/5")
+		response := httptest.NewRecorder()
+
+		server.ServeHTTP(response, request)
+
+		assertStatus(t, response.Code, http.StatusOK)
+		assertCalledFunction(t, spy.calledFunction, deleteByFlagFunctionName)
+
+		wantedList := []Event{event1, createNeutralEventWithId(2), event3, event4, createNeutralEventWithId(5)}
+		assertEventList(t, store.GetAllEvents(), wantedList)
+
+		wantResponse := fmt.Sprintf("{\"%s\":%d}", lineNumberResponseKey, 2)
+		assertResponseBody(t, response.Body.String(), wantResponse)
+	})
+
+	t.Run("Delete request should return status code 422 if given flag is not a number", func(t *testing.T) {
+		store = &StubEventStore{}
+
+		request := newDeleteRequest(api_url + "deleteflag/true")
+		response := httptest.NewRecorder()
+
+		server.ServeHTTP(response, request)
+
+		assertStatus(t, response.Code, http.StatusUnprocessableEntity)
+	})
+}
+
 // Test doubles
 type Spy struct {
 	calledFunction       string
@@ -363,6 +428,20 @@ func (s *StubEventStore) DeleteById(id int) int {
 	}
 
 	return 0
+}
+
+func (s *StubEventStore) DeleteByFlag(flag int) int {
+	s.spy.calledFunction = deleteByFlagFunctionName
+	linesDeleted := 0
+
+	for i, event := range s.events {
+		if contains(event.Flags, flag) {
+			s.events[i] = createNeutralEventWithId(event.Id)
+			linesDeleted++
+		}
+	}
+
+	return linesDeleted
 }
 
 type MockClock struct{}

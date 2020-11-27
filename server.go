@@ -43,6 +43,7 @@ func newServer() http.Handler {
 
 	// DELETE requests
 	router.HandleFunc(api_url+"{id}", deleteByIdHandler).Methods(http.MethodDelete)
+	router.HandleFunc(api_url+"deleteflag/{id}", deleteByFlagHandler).Methods(http.MethodDelete)
 
 	return router
 }
@@ -158,6 +159,17 @@ func deleteByIdHandler(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnprocessableEntity)
 	} else {
 		affectedLines := store.DeleteById(id)
+		_, _ = w.Write(formatLineNumberResponse(affectedLines))
+	}
+}
+
+func deleteByFlagHandler(w http.ResponseWriter, r *http.Request) {
+	flag, err := extractIntFromURL(r, api_url+"deleteflag/")
+
+	if err != nil {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+	} else {
+		affectedLines := store.DeleteByFlag(flag)
 		_, _ = w.Write(formatLineNumberResponse(affectedLines))
 	}
 }
