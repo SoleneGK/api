@@ -75,6 +75,36 @@ func getByFlagHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func postHandler(w http.ResponseWriter, r *http.Request) {
+	eventList := getEventListFromRequest(r)
+	validEventList := getValidEventList(eventList)
+
+	affectedLines := store.RegisterNewEvents(validEventList)
+	_, _ = w.Write(formatLineNumberResponse(affectedLines))
+}
+
+func deleteByIdHandler(w http.ResponseWriter, r *http.Request) {
+	id, err := extractIntFromURL(r, api_url)
+
+	if err != nil {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+	} else {
+		affectedLines := store.DeleteById(id)
+		_, _ = w.Write(formatLineNumberResponse(affectedLines))
+	}
+}
+
+func deleteByFlagHandler(w http.ResponseWriter, r *http.Request) {
+	flag, err := extractIntFromURL(r, api_url+"deleteflag/")
+
+	if err != nil {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+	} else {
+		affectedLines := store.DeleteByFlag(flag)
+		_, _ = w.Write(formatLineNumberResponse(affectedLines))
+	}
+}
+
 func extractIntFromURL(r *http.Request, prefix string) (int, error) {
 	return strconv.Atoi(strings.TrimPrefix(r.URL.Path, prefix))
 }
@@ -92,6 +122,10 @@ func isEmptyEvent(event Event) bool {
 	return reflect.DeepEqual(event, Event{})
 }
 
+func writeResponseBody(w http.ResponseWriter, content interface{}) {
+	_ = json.NewEncoder(w).Encode(content)
+}
+
 func sentEventList(eventList []Event, w http.ResponseWriter) {
 	if isEmptyEventList(eventList) {
 		w.WriteHeader(http.StatusNotFound)
@@ -102,18 +136,6 @@ func sentEventList(eventList []Event, w http.ResponseWriter) {
 
 func isEmptyEventList(eventList []Event) bool {
 	return len(eventList) == 0
-}
-
-func writeResponseBody(w http.ResponseWriter, content interface{}) {
-	_ = json.NewEncoder(w).Encode(content)
-}
-
-func postHandler(w http.ResponseWriter, r *http.Request) {
-	eventList := getEventListFromRequest(r)
-	validEventList := getValidEventList(eventList)
-
-	affectedLines := store.RegisterNewEvents(validEventList)
-	_, _ = w.Write(formatLineNumberResponse(affectedLines))
 }
 
 func getEventListFromRequest(r *http.Request) []Event {
@@ -149,27 +171,5 @@ func isValidEvent(event Event) bool {
 func setValidTime(event *Event) {
 	if event.Timestamp.IsZero() {
 		event.Timestamp = clock.Now()
-	}
-}
-
-func deleteByIdHandler(w http.ResponseWriter, r *http.Request) {
-	id, err := extractIntFromURL(r, api_url)
-
-	if err != nil {
-		w.WriteHeader(http.StatusUnprocessableEntity)
-	} else {
-		affectedLines := store.DeleteById(id)
-		_, _ = w.Write(formatLineNumberResponse(affectedLines))
-	}
-}
-
-func deleteByFlagHandler(w http.ResponseWriter, r *http.Request) {
-	flag, err := extractIntFromURL(r, api_url+"deleteflag/")
-
-	if err != nil {
-		w.WriteHeader(http.StatusUnprocessableEntity)
-	} else {
-		affectedLines := store.DeleteByFlag(flag)
-		_, _ = w.Write(formatLineNumberResponse(affectedLines))
 	}
 }
