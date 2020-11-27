@@ -165,7 +165,12 @@ func getValidEventList(eventList []Event) (validEventList []Event) {
 }
 
 func isValidEvent(event Event) bool {
-	return len(event.Flags) >= 1 && event.Data != ""
+	return len(event.Flags) >= 1 && event.Data != "" && isJson(event.Data)
+}
+
+func isJson(stringToTest string) bool {
+	var js json.RawMessage
+	return json.Unmarshal([]byte(stringToTest), &js) == nil
 }
 
 func setValidTime(event *Event) {

@@ -195,6 +195,11 @@ func TestPostRequest(t *testing.T) {
 		Timestamp: time.Date(2019, time.November, 21, 07, 30, 22, 658463, time.UTC),
 		Data:      `{"Env":"dev"}`,
 	}
+	invalidEvent3 := Event{
+		Timestamp: time.Date(2019, time.November, 21, 07, 30, 22, 658463, time.UTC),
+		Flags:     []int{9},
+		Data:      "this is not json",
+	}
 
 	t.Run("Post request should call RegisterNewEvents, pass event list and return number of lines created", func(t *testing.T) {
 		eventList := []Event{validEvent1, validEvent2}
@@ -215,7 +220,7 @@ func TestPostRequest(t *testing.T) {
 	})
 
 	t.Run("Post request should register only valid events", func(t *testing.T) {
-		eventList := []Event{validEvent1, invalidEvent1, validEvent2, validEvent3, invalidEvent2}
+		eventList := []Event{validEvent1, invalidEvent1, validEvent2, validEvent3, invalidEvent2, invalidEvent3}
 		spy := &Spy{}
 		store = &StubEventStore{eventList, spy}
 		clock = MockClock{}
